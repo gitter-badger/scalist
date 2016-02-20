@@ -1,7 +1,7 @@
 package ru.pavkin.todoist.api.core.decoder
 
 import cats.{FlatMap, Apply}
-import shapeless.{HNil, ::}
+import shapeless.{HList, HNil, ::}
 import cats.syntax.flatMap._
 import cats.syntax.apply._
 
@@ -13,9 +13,16 @@ trait SingleResponseDecoder[F[_], Base] extends ResponseDecoder[F, Base] {self =
       def parse(resource: Base): F[Out] = self.parse(resource).map2(other.parse(resource))((a, b) => b :: a :: HNil)
     }
 
-  def compose[Out2](other: ResponseDecoder.Aux[F, Out, Out2])
+  def compose[Out2](other: SingleResponseDecoder.Aux[F, Out, Out2])
                    (implicit F: FlatMap[F]): SingleResponseDecoder.Aux[F, Base, Out2] =
     new SingleResponseDecoder[F, Base] {
+      type Out = Out2
+      def parse(resource: Base): F[Out] = self.parse(resource).flatMap(other.parse)
+    }
+
+  def compose[Out2 <: HList](other: MultipleResponseDecoder.Aux[F, Out, Out2])
+                            (implicit F: FlatMap[F]): MultipleResponseDecoder.Aux[F, Base, Out2] =
+    new MultipleResponseDecoder[F, Base] {
       type Out = Out2
       def parse(resource: Base): F[Out] = self.parse(resource).flatMap(other.parse)
     }
@@ -24,8 +31,15 @@ trait SingleResponseDecoder[F[_], Base] extends ResponseDecoder[F, Base] {self =
 
 object SingleResponseDecoder {
   type Aux[F[_], Base, Out0] = SingleResponseDecoder[F, Base] {type Out = Out0}
+
   def using[F[_], Base, Out0](f: Base => F[Out0]): Aux[F, Base, Out0] = new SingleResponseDecoder[F, Base] {
     type Out = Out0
     def parse(resource: Base): F[Out] = f(resource)
   }
+
+  implicit def composeDecoders[F[_] : FlatMap, Base, Out0, Out1]
+  (implicit
+   p1: SingleResponseDecoder.Aux[F, Base, Out0],
+   p2: SingleResponseDecoder.Aux[F, Out0, Out1]): SingleResponseDecoder.Aux[F, Base, Out1] =
+    p1.compose(p2)
 }
