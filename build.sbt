@@ -46,6 +46,7 @@ lazy val shapelessVersion = "2.2.5"
 lazy val catsVersion = "0.4.1"
 lazy val circeVersion = "0.3.0"
 lazy val dispatchVersion = "0.11.2"
+lazy val jodaVersion = "2.9.2"
 lazy val scalaCheckVersion = "1.12.5"
 lazy val scalaTestVersion = "2.2.6"
 
@@ -64,7 +65,9 @@ lazy val core = project.in(file("core"))
   .settings(
     libraryDependencies ++= Seq(
       "com.chuusai" %% "shapeless" % shapelessVersion,
-      "org.typelevel" %% "cats-core" % catsVersion
+      "org.typelevel" %% "cats-core" % catsVersion,
+      "joda-time" % "joda-time" % jodaVersion,
+      "org.joda" % "joda-convert" % "1.8"
     )
   )
 

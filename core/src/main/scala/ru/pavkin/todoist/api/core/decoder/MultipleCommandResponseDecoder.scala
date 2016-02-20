@@ -1,6 +1,7 @@
 package ru.pavkin.todoist.api.core.decoder
 
-import cats.{Apply, Functor}
+import cats.{FlatMap, Apply, Functor}
+import shapeless.ops.hlist.Selector
 import shapeless.{HNil, ::, HList}
 import cats.syntax.apply._
 import cats.syntax.functor._
@@ -49,4 +50,12 @@ object MultipleCommandResponseDecoder {
       def parse(command: CommandH :: CommandT)(resource: Base): F[H :: T] =
         t.combine(h).parse(command)(resource)
     }
+
+  implicit def composeDecoders[F[_] : FlatMap, CL <: HList, Base, Out0, OutL <: HList]
+  (implicit
+   p1: SingleResponseDecoder.Aux[F, Base, Out0],
+   p2: MultipleCommandResponseDecoder.Aux[F, CL, Out0, OutL])
+  : MultipleCommandResponseDecoder.Aux[F, CL, Base, OutL] =
+    p1.compose(p2)
 }
+

@@ -40,10 +40,10 @@ object MultipleResponseDecoder {
       def parse(resource: Base): F[OutH :: OutT] = t.combine(h).parse(resource)
     }
 
-  implicit def decoderComposer[F[_] : FlatMap, Base, Out0, OutL <: HList]
-  (implicit
-   p1: SingleResponseDecoder.Aux[F, Base, Out0],
-   p2: MultipleResponseDecoder.Aux[F, Out0, OutL]): MultipleResponseDecoder.Aux[F, Base, OutL] =
-    p1.compose(p2)
+//  implicit def composeDecoders[F[_] : FlatMap, Base, Out0, OutL <: HList]
+//  (implicit
+//   p1: SingleResponseDecoder.Aux[F, Base, Out0],
+//   p2: MultipleResponseDecoder.Aux[F, Out0, OutL]): MultipleResponseDecoder.Aux[F, Base, OutL] =
+//    p1.compose(p2)
 
 }
