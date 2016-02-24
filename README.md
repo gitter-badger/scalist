@@ -21,6 +21,7 @@ Project is at early stages now. Implemented feature set is not complete and ther
     2. [Commands](#commands)
     3. [Request execution](#request-execution)
     4. [Response handling](#response-handling)
+    5. [Result type](#result-type)
 2. [Requirements](#requirements)
 3. [Design](#design)
   1. [Dependencies](#dependencies)
@@ -141,14 +142,22 @@ Note that resource ids, while being `UUID`s under the hood, are tagged with corr
 val invalidCommand = AddLabel("Label").andForIt(AddTask("Task1", _)) 
 ```
 
-// Actual request execution starts only when you call execute on the request builder
+#### Request execution
 
-Note that any API call result has type `Future[Xor[Error, Result]]`, where:
+To send the request just call `execute` method on the request object:
+
+```scala
+projectsRequest.execute
+```
+
+#### Response handling
+
+Every API call result has type `Future[Xor[Error, Result]]`, where:
 
 - `Xor` is an alternative implementation of `Either` from Cats library (see [more](http://typelevel.org/cats/tut/xor.html])). It's the only public dependency on Cats or Shapeless you'll have to use.
 - `Error` can be either:
- - `HTTPError`: e.g. bad request.
- - `DecodingError`: this means some inconsistency between Scalist and the Todoist API. If you got that, please file an issue [here](https://github.com/vpavkin/scalist/issues).
+ - `HTTPError`, that means non successful HTTP code returne from Todoist API
+ - `DecodingError`, that means some inconsistency between Scalist and the Todoist API. If you got that, please file an issue [here](https://github.com/vpavkin/scalist/issues).
 - `Result` is type safe representation of API response, based on what you requested.
 
 With this in mind, we can handle the result this way:
@@ -164,11 +173,82 @@ api.get[Projects].and[Labels].execute.foreach{
 }
 ```
 
-Should be mentioned here that Scalist tracks all requested resources/commands at compile time. It protects you from mistakes in building requests or. Consider these examples:
+Ofcourse, you are good to go here with all well known combinators for `Future` and `Xor`, as well as with `XorT` monad transformer.
+
+#### Result type.
+
+The API *effect* is always the same:
 ```scala
-    result.filters - this won't compile, because we requested only Projects and Labels.
-    // 
+type Effect[Result] = Future[Xor[Error, Result]]
 ```
+
+`Result` type depends on what you requested. Take a look at following examples:
+
+Single resource request returns just a list of entity instances:
+```scala
+api.get[Projects] // List[Project]
+```
+
+Multiple resources request returns an HList of requested resources collections:
+```scala 
+api.get[Projects]
+   .and[Labels]   // List[Labels] :: List[Projects] :: HNil  
+```
+
+You won't need to work with HLists - there're typesafe helpers, defined for such results:
+```scala 
+api.get[Projects]
+   .and[Labels]
+   
+// later in response handler:
+result.projects // List[Project]
+result.labels // List[Label]
+result.filters // won't compile as we didn't request filters
+```
+
+Single command returns `CommandResult` object for simple commands and `TempIdCommandResult` for commads with `temp_id` parameter (e.g. adding new resources):
+```scala
+api.perform(UpdateTask(1, "NewText")) // SimpleCommandResult
+api.perform(AddProject("Project")) // TempIdCommandResult
+```
+Without going into details both `SimpleCommandResult` and `TempIdCommandResult` are success/failure containers. `TempIdCommandResult` also holds the real id, assigned to the created resource.
+
+All command sequences, defined either with `perform().and().and()` or `performAll()`, return `HList` of corresponding results.
+
+Again, you don't have to deal with `HList`s explicitly:
+
+1. `resultFor(N)` helper is typesafe, you get results with corresponding type being calculated at compile time:
+```scala
+api.perform(AddProject("project"))
+   .and(UpdateTask(1, "task"))
+
+// later
+result.resultFor(_0) // TempIdCommandResult of AddProject command
+result.resultFor(_1) // SimpleCommandResult of UpdateTask 
+result.resultFor(_2) // won't compile, only 2 commands were sent
+```
+
+2. Runtime typed `resultFor(uuid: UUID)` allows to get the result of a command with particular `uuid`.
+
+Note, that it gives much less compile time safety: method calls always compile and the return type is always `Option[CommandResult]`, where `CommandResult` is a super-trait for any command result.
+
+```scala
+val addProject = AddProject("project")
+api.perform(addProject)
+   .and(UpdateTask(1, "task"))
+
+// later
+// Option[CommandResult], resolves to Some(TempIdCommandResult)
+result.resultFor(addProject.uuid) 
+
+result.resultFor(UUID.randomUUID) // returns None at runtime
+```
+
+## Requirements
+
+Scalist requires
+
+
 ## Design
 ### Dependencies
  The only thing you'll need to directly work with is `cats.data.Xor`.
